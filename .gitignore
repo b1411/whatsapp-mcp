@@ -6,3 +6,12 @@ whatsapp.log
 whatsapp-bridge/whatsapp-bridge
 whatsapp-bridge/whatsapp-bridge.exe
 *.orig
+
+# message database, downloaded media and logs - private data, never commit
+whatsapp-bridge/store/
+*.log
+*~
+
+# local launch helpers (Windows autostart)
+whatsapp-bridge/start-bridge.cmd
+whatsapp-bridge/start-bridge.vbs
