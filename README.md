@@ -1,5 +1,15 @@
 # WhatsApp MCP Server
 
+> **Fork notice.** This is a fork of [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp), which has had no code changes since April 2025 while 150+ pull requests sit open. It carries two changes on top of upstream:
+>
+> - **Fixes `Client outdated (405)`** — upstream pins a March 2025 build of whatsmeow that WhatsApp now refuses outright, so a fresh clone of upstream cannot connect at all.
+> - **Adds local voice message transcription** — `transcribe_audio` and `transcribe_audio_file`, running faster-whisper on your own machine, with optional CUDA acceleration. See [Voice Message Transcription](#voice-message-transcription).
+>
+> The transcription work is also offered upstream as [PR #359](https://github.com/lharries/whatsapp-mcp/pull/359).
+>
+> **If you just want a maintained WhatsApp MCP server, use [verygoodplugins/whatsapp-mcp](https://github.com/verygoodplugins/whatsapp-mcp) instead.** It is a far more developed fork with regular releases, tests and an active maintainer, and it already tracks a current whatsmeow. This fork exists because it additionally has GPU-accelerated transcription working on Windows, which that one does not yet.
+
+
 This is a Model Context Protocol (MCP) server for WhatsApp.
 
 With this you can search and read your personal Whatsapp messages (including images, videos, documents, and audio messages), search your contacts and send messages to either individuals or groups. You can also send media files including images, videos, documents, and audio messages.
