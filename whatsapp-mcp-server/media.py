@@ -1,4 +1,4 @@
-"""Turn a video into something a model can actually look at: frames plus a transcript."""
+"""Turn media into something a model can actually look at: video frames, transcripts, images."""
 import json
 import os
 import re
@@ -97,13 +97,18 @@ def _frange(start: float, stop: float, step: float):
         t += step
 
 
+def scale_filter(max_dimension: int) -> str:
+    """Cap the longest side at max_dimension, keeping the aspect ratio and even sides."""
+    return (f"scale='if(gt(iw,ih),min({max_dimension},iw),-2)'"
+            f":'if(gt(iw,ih),-2,min({max_dimension},ih))'")
+
+
 def _grab_frame(path: str, when: float, max_dimension: int) -> Optional[bytes]:
     """Decode a single frame at `when`, downscaled, as JPEG bytes."""
-    scale = (f"scale='if(gt(iw,ih),min({max_dimension},iw),-2)'"
-             f":'if(gt(iw,ih),-2,min({max_dimension},ih))'")
     out = subprocess.run(
         ["ffmpeg", "-ss", f"{when:.3f}", "-i", path, "-frames:v", "1",
-         "-vf", scale, "-q:v", "4", "-f", "image2", "-c:v", "mjpeg", "pipe:1"],
+         "-vf", scale_filter(max_dimension), "-q:v", "4", "-f", "image2",
+         "-c:v", "mjpeg", "pipe:1"],
         capture_output=True,
     )
     if out.returncode != 0 or not out.stdout:
@@ -150,3 +155,39 @@ def extract_frames(
 
 def format_timestamp(seconds: float) -> str:
     return f"{int(seconds) // 60:d}:{int(seconds) % 60:02d}"
+
+
+def load_image(path: str, max_dimension: int = 1024) -> Dict[str, Any]:
+    """Read a still image, downscaled to JPEG bytes a model can be shown.
+
+    One full-resolution photo would otherwise take far more context than it is
+    worth, so the longest side is capped before encoding.
+    """
+    _require_ffmpeg()
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", path],
+        capture_output=True,
+    )
+    width = height = None
+    if out.returncode == 0:
+        streams = json.loads(out.stdout.decode("utf-8", "replace")).get("streams", [])
+        still = next((s for s in streams if s.get("codec_type") == "video"), None)
+        if still:
+            width, height = still.get("width"), still.get("height")
+
+    encoded = subprocess.run(
+        ["ffmpeg", "-i", path, "-vf", scale_filter(max_dimension), "-q:v", "4",
+         "-frames:v", "1", "-f", "image2", "-c:v", "mjpeg", "pipe:1"],
+        capture_output=True,
+    )
+    if encoded.returncode != 0 or not encoded.stdout:
+        raise RuntimeError(
+            f"could not read image: {encoded.stderr.decode('utf-8', 'replace')[-300:]}"
+        )
+
+    return {
+        "jpeg": encoded.stdout,
+        "width": width,
+        "height": height,
+        "bytes": len(encoded.stdout),
+    }

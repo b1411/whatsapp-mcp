@@ -16,7 +16,7 @@ from whatsapp import (
     download_media as whatsapp_download_media
 )
 from transcribe import transcribe_file
-from video import extract_frames, format_timestamp, probe as probe_video
+from media import extract_frames, format_timestamp, load_image, probe as probe_video
 
 # Initialize FastMCP server
 mcp = FastMCP("whatsapp")
@@ -318,6 +318,18 @@ def transcribe_audio_file(
     )
 
 
+def _render_image(path: str, max_dimension: int) -> List[Union[str, Image]]:
+    try:
+        loaded = load_image(path, max_dimension=max_dimension)
+    except Exception as e:
+        return [f"Could not read the image: {e}"]
+
+    size = (f"{loaded['width']}x{loaded['height']}"
+            if loaded["width"] else "unknown size")
+    return [f"Image ({size}, shown at up to {max_dimension}px):",
+            Image(data=loaded["jpeg"], format="jpeg")]
+
+
 def _render_video(path: str, max_frames: int, interval_seconds: Optional[float],
                   max_dimension: int, transcribe: bool, language: Optional[str],
                   mode: str) -> List[Union[str, Image]]:
@@ -430,6 +442,47 @@ def view_video_file(
                              transcribe, language, mode)
     except Exception as e:
         return [f"Could not inspect the video: {e}"]
+
+
+@mcp.tool()
+def view_image(
+    message_id: str,
+    chat_jid: str,
+    max_dimension: int = 1024,
+) -> List[Union[str, Image]]:
+    """Look at an image message: returns the picture itself, not a file path.
+
+    Args:
+        message_id: The ID of the message containing the image
+        chat_jid: The JID of the chat containing the message
+        max_dimension: Longest side of the returned image in pixels
+
+    Returns:
+        A short description followed by the image
+    """
+    file_path = whatsapp_download_media(message_id, chat_jid)
+    if not file_path:
+        return ["Failed to download the image from that message."]
+    return _render_image(file_path, max_dimension)
+
+
+@mcp.tool()
+def view_image_file(
+    image_path: str,
+    max_dimension: int = 1024,
+) -> List[Union[str, Image]]:
+    """Look at a local image file: returns the picture itself, not a file path.
+
+    Args:
+        image_path: Absolute path to an image file
+        max_dimension: Longest side of the returned image in pixels
+
+    Returns:
+        A short description followed by the image
+    """
+    if not os.path.isfile(image_path):
+        return [f"File not found: {image_path}"]
+    return _render_image(image_path, max_dimension)
 
 
 if __name__ == "__main__":
