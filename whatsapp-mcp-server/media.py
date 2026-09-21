@@ -32,6 +32,7 @@ def probe(path: str) -> Dict[str, Any]:
         ["ffprobe", "-v", "error", "-print_format", "json",
          "-show_format", "-show_streams", path],
         capture_output=True,
+        stdin=subprocess.DEVNULL,
     )
     if out.returncode != 0:
         raise RuntimeError(f"ffprobe failed: {out.stderr.decode('utf-8', 'replace')[-300:]}")
@@ -62,9 +63,10 @@ def probe(path: str) -> Dict[str, Any]:
 def _scene_timestamps(path: str, threshold: float = SCENE_THRESHOLD) -> List[float]:
     """Timestamps where the picture changes substantially."""
     out = subprocess.run(
-        ["ffmpeg", "-i", path, "-vf", f"select='gt(scene,{threshold})',showinfo",
+        ["ffmpeg", "-nostdin", "-i", path, "-vf", f"select='gt(scene,{threshold})',showinfo",
          "-an", "-f", "null", "-"],
         capture_output=True,
+        stdin=subprocess.DEVNULL,
     )
     stderr = out.stderr.decode("utf-8", "replace")
     return [float(m) for m in re.findall(r"pts_time:([0-9.]+)", stderr)]
@@ -106,10 +108,11 @@ def scale_filter(max_dimension: int) -> str:
 def _grab_frame(path: str, when: float, max_dimension: int) -> Optional[bytes]:
     """Decode a single frame at `when`, downscaled, as JPEG bytes."""
     out = subprocess.run(
-        ["ffmpeg", "-ss", f"{when:.3f}", "-i", path, "-frames:v", "1",
+        ["ffmpeg", "-nostdin", "-ss", f"{when:.3f}", "-i", path, "-frames:v", "1",
          "-vf", scale_filter(max_dimension), "-q:v", "4", "-f", "image2",
          "-c:v", "mjpeg", "pipe:1"],
         capture_output=True,
+        stdin=subprocess.DEVNULL,
     )
     if out.returncode != 0 or not out.stdout:
         _log(f"[video] no frame at {when:.1f}s: {out.stderr.decode('utf-8','replace')[-200:]}")
@@ -167,6 +170,7 @@ def load_image(path: str, max_dimension: int = 1024) -> Dict[str, Any]:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", path],
         capture_output=True,
+        stdin=subprocess.DEVNULL,
     )
     width = height = None
     if out.returncode == 0:
@@ -176,9 +180,10 @@ def load_image(path: str, max_dimension: int = 1024) -> Dict[str, Any]:
             width, height = still.get("width"), still.get("height")
 
     encoded = subprocess.run(
-        ["ffmpeg", "-i", path, "-vf", scale_filter(max_dimension), "-q:v", "4",
+        ["ffmpeg", "-nostdin", "-i", path, "-vf", scale_filter(max_dimension), "-q:v", "4",
          "-frames:v", "1", "-f", "image2", "-c:v", "mjpeg", "pipe:1"],
         capture_output=True,
+        stdin=subprocess.DEVNULL,
     )
     if encoded.returncode != 0 or not encoded.stdout:
         raise RuntimeError(

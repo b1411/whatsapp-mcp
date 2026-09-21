@@ -96,8 +96,9 @@ def _to_wav(src_path: str) -> str:
     fd, out_path = tempfile.mkstemp(suffix=".wav", prefix="wa_voice_")
     os.close(fd)
     result = subprocess.run(
-        ["ffmpeg", "-y", "-i", src_path, "-ar", "16000", "-ac", "1", "-f", "wav", out_path],
+        ["ffmpeg", "-nostdin", "-y", "-i", src_path, "-ar", "16000", "-ac", "1", "-f", "wav", out_path],
         capture_output=True,
+        stdin=subprocess.DEVNULL,
     )
     if result.returncode != 0:
         os.unlink(out_path)
