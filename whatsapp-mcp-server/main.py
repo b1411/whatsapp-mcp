@@ -1,5 +1,6 @@
-from typing import List, Dict, Any, Optional
-from mcp.server.fastmcp import FastMCP
+import os
+from typing import List, Dict, Any, Optional, Union
+from mcp.server.fastmcp import FastMCP, Image
 from whatsapp import (
     search_contacts as whatsapp_search_contacts,
     list_messages as whatsapp_list_messages,
@@ -15,6 +16,7 @@ from whatsapp import (
     download_media as whatsapp_download_media
 )
 from transcribe import transcribe_file
+from video import extract_frames, format_timestamp, probe as probe_video
 
 # Initialize FastMCP server
 mcp = FastMCP("whatsapp")
@@ -314,6 +316,120 @@ def transcribe_audio_file(
         model_size=model_size,
         with_timestamps=with_timestamps,
     )
+
+
+def _render_video(path: str, max_frames: int, interval_seconds: Optional[float],
+                  max_dimension: int, transcribe: bool, language: Optional[str],
+                  mode: str) -> List[Union[str, Image]]:
+    """Build the mixed text/image reply that lets the model actually watch a video."""
+    result = extract_frames(
+        path,
+        max_frames=max_frames,
+        interval_seconds=interval_seconds,
+        max_dimension=max_dimension,
+        mode=mode,
+    )
+
+    header = (
+        f"Video: {result['duration_seconds']}s, {result['width']}x{result['height']}, "
+        f"{result['fps']} fps. Showing {result['frame_count']} frames "
+        f"({'at scene changes' if result['sampling'] == 'scenes' else 'sampled evenly'})."
+    )
+    parts: List[Union[str, Image]] = [header]
+
+    if transcribe:
+        if result["has_audio"]:
+            spoken = transcribe_file(path, language=language)
+            if spoken.get("success") and spoken.get("text"):
+                parts.append(f"Transcript ({spoken['language']}): {spoken['text']}")
+            elif spoken.get("success"):
+                parts.append("Transcript: no speech detected.")
+            else:
+                parts.append(f"Transcript failed: {spoken.get('message')}")
+        else:
+            parts.append("This video has no audio track.")
+
+    for frame in result["frames"]:
+        parts.append(f"[{format_timestamp(frame['time'])}]")
+        parts.append(Image(data=frame["jpeg"], format="jpeg"))
+
+    if not result["frames"]:
+        parts.append("No frames could be decoded from this video.")
+    return parts
+
+
+@mcp.tool()
+def view_video(
+    message_id: str,
+    chat_jid: str,
+    max_frames: int = 8,
+    interval_seconds: Optional[float] = None,
+    max_dimension: int = 640,
+    transcribe: bool = True,
+    language: Optional[str] = None,
+    mode: str = "auto",
+) -> List[Union[str, Image]]:
+    """Watch a video message: returns frames as images plus a transcript of its audio.
+
+    Frames are returned as image content rather than file paths, so the video can
+    be seen directly. By default frames are taken at scene changes, falling back
+    to even sampling for static or long videos.
+
+    Args:
+        message_id: The ID of the message containing the video
+        chat_jid: The JID of the chat containing the message
+        max_frames: Maximum number of frames to return (each one costs context)
+        interval_seconds: Force a fixed interval between frames instead of automatic selection
+        max_dimension: Longest side of each frame in pixels
+        transcribe: Also transcribe the video's audio track locally
+        language: Optional ISO code hint for the transcript (e.g. "ru", "en")
+        mode: "auto", "scenes" or "interval" frame selection
+
+    Returns:
+        A list of text labels and frame images, in chronological order
+    """
+    file_path = whatsapp_download_media(message_id, chat_jid)
+    if not file_path:
+        return ["Failed to download the video from that message."]
+
+    try:
+        return _render_video(file_path, max_frames, interval_seconds, max_dimension,
+                             transcribe, language, mode)
+    except Exception as e:
+        return [f"Could not inspect the video: {e}"]
+
+
+@mcp.tool()
+def view_video_file(
+    video_path: str,
+    max_frames: int = 8,
+    interval_seconds: Optional[float] = None,
+    max_dimension: int = 640,
+    transcribe: bool = True,
+    language: Optional[str] = None,
+    mode: str = "auto",
+) -> List[Union[str, Image]]:
+    """Watch a local video file: returns frames as images plus a transcript of its audio.
+
+    Args:
+        video_path: Absolute path to a video file
+        max_frames: Maximum number of frames to return (each one costs context)
+        interval_seconds: Force a fixed interval between frames instead of automatic selection
+        max_dimension: Longest side of each frame in pixels
+        transcribe: Also transcribe the video's audio track locally
+        language: Optional ISO code hint for the transcript (e.g. "ru", "en")
+        mode: "auto", "scenes" or "interval" frame selection
+
+    Returns:
+        A list of text labels and frame images, in chronological order
+    """
+    if not os.path.isfile(video_path):
+        return [f"File not found: {video_path}"]
+    try:
+        return _render_video(video_path, max_frames, interval_seconds, max_dimension,
+                             transcribe, language, mode)
+    except Exception as e:
+        return [f"Could not inspect the video: {e}"]
 
 
 if __name__ == "__main__":

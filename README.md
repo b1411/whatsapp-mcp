@@ -3,6 +3,7 @@
 > **Fork notice.** This is a fork of [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp), which has had no code changes since April 2025 while 150+ pull requests sit open. It carries two changes on top of upstream:
 >
 > - **Fixes `Client outdated (405)`** — upstream pins a March 2025 build of whatsmeow that WhatsApp now refuses outright, so a fresh clone of upstream cannot connect at all.
+> - **Adds video viewing** - `view_video` returns a video's frames as images plus a transcript, so a video message can actually be watched. See [Watching Videos](#watching-videos).
 > - **Adds local voice message transcription** — `transcribe_audio` and `transcribe_audio_file`, running faster-whisper on your own machine, with optional CUDA acceleration. See [Voice Message Transcription](#voice-message-transcription).
 >
 > The transcription work is also offered upstream as [PR #359](https://github.com/lharries/whatsapp-mcp/pull/359).
@@ -152,6 +153,8 @@ Claude can access the following tools to interact with WhatsApp:
 - **download_media**: Download media from a WhatsApp message and get the local file path
 - **transcribe_audio**: Transcribe a voice message from a chat to text, locally
 - **transcribe_audio_file**: Transcribe any local audio file to text, locally
+- **view_video**: Watch a video message - returns frames as images plus a transcript of its audio
+- **view_video_file**: The same for any local video file
 
 ### Media Handling Features
 
@@ -199,6 +202,25 @@ uv sync --extra cuda
 ```
 
 The server locates these wheels itself, so no system-wide CUDA installation or `PATH` changes are required. If the GPU is unusable for any reason, it falls back to the CPU automatically.
+
+
+#### Watching Videos
+
+**view_video** turns a video message into something a model can actually look at: a set of frames returned as image content, plus a transcript of the audio. Frames come back as images rather than file paths, so clients with no filesystem access can see them too. **view_video_file** does the same for a local file.
+
+By default frames are taken **at scene changes**, which shows what actually happens in the video instead of whatever a fixed timer lands on. Videos with fewer than three detected cuts, and those longer than 10 minutes (where scene detection would mean decoding the whole file), fall back to even sampling.
+
+Because every frame costs context, the frame count is capped rather than the interval fixed: a ten-minute video sampled every five seconds would return 120 images.
+
+| Argument | Default | Notes |
+| --- | --- | --- |
+| `max_frames` | 8 | Upper bound on returned frames |
+| `interval_seconds` | auto | Force a fixed interval instead of automatic selection |
+| `max_dimension` | 640 | Longest side of each frame, in pixels |
+| `transcribe` | true | Also transcribe the audio track |
+| `mode` | `auto` | `auto`, `scenes` or `interval` |
+
+Videos with no audio track are reported as such rather than failing.
 
 ## Technical Details
 
