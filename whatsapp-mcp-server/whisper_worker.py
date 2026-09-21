@@ -12,6 +12,11 @@ from transcribe import transcribe_file
 
 
 def main() -> None:
+    # Windows would otherwise encode replies in the console codepage, which the
+    # client reads as UTF-8 and chokes on the first Cyrillic transcript.
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
+
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -28,7 +33,7 @@ def main() -> None:
         except Exception as e:  # never die on one bad request
             result = {"success": False, "message": f"worker error: {e}"}
 
-        sys.stdout.write(json.dumps(result, ensure_ascii=False) + "\n")
+        sys.stdout.write(json.dumps(result, ensure_ascii=True) + "\n")
         sys.stdout.flush()
 
 

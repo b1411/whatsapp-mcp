@@ -27,6 +27,7 @@ def _start() -> subprocess.Popen:
         text=True,
         encoding="utf-8",
         cwd=os.path.dirname(_WORKER_SCRIPT),
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
     )
 
 
