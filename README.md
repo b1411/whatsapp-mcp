@@ -1,12 +1,13 @@
 # WhatsApp MCP Server
 
-> **Fork notice.** This is a fork of [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp), which has had no code changes since April 2025 while 150+ pull requests sit open. It carries two changes on top of upstream:
+> **Fork notice.** This is a fork of [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp), which has had no code changes since April 2025 while 150+ pull requests sit open. It carries these changes on top of upstream:
 >
 > - **Fixes `Client outdated (405)`** — upstream pins a March 2025 build of whatsmeow that WhatsApp now refuses outright, so a fresh clone of upstream cannot connect at all.
+> - **Fixes every media download failing with `403`** — the direct path was rebuilt from the media URL by string surgery, which dropped the query string carrying its access tokens, so images, video, documents and voice notes were all unreachable.
 > - **Adds media viewing** - `view_image` and `view_video` return pictures and video frames as images plus a transcript, so photos and video messages can actually be seen. See [Watching Videos](#watching-videos).
 > - **Adds local voice message transcription** — `transcribe_audio` and `transcribe_audio_file`, running faster-whisper on your own machine, with optional CUDA acceleration. See [Voice Message Transcription](#voice-message-transcription).
 >
-> The transcription work is also offered upstream as [PR #359](https://github.com/lharries/whatsapp-mcp/pull/359).
+> The two features are also offered upstream as [PR #359](https://github.com/lharries/whatsapp-mcp/pull/359) and [PR #360](https://github.com/lharries/whatsapp-mcp/pull/360).
 >
 > **If you just want a maintained WhatsApp MCP server, use [verygoodplugins/whatsapp-mcp](https://github.com/verygoodplugins/whatsapp-mcp) instead.** It is a far more developed fork with regular releases, tests and an active maintainer, and it already tracks a current whatsmeow. This fork exists because it additionally has GPU-accelerated transcription working on Windows, which that one does not yet.
 
@@ -188,6 +189,8 @@ Both accept an optional `language` hint (auto-detected otherwise), `translate_to
 
 The model is downloaded on first use and cached in memory afterwards, so only the first call is slow. FFmpeg is used to normalise the audio, and is already a prerequisite for sending voice messages.
 
+Whisper runs in a small worker process rather than inside the MCP server. That keeps the speech stack and its CUDA libraries out of the served process, and keeps a long decode off the event loop, where it would otherwise block every other tool call. The worker stays alive between requests, so the model is loaded once: the first call takes about 16s and later ones about 2.5s on an RTX 5050.
+
 Configuration via environment variables:
 
 | Variable | Default | Notes |
@@ -195,6 +198,7 @@ Configuration via environment variables:
 | `WHISPER_MODEL` | `large-v3-turbo` | Any faster-whisper model, e.g. `tiny`, `base`, `small`, `large-v3` |
 | `WHISPER_DEVICE` | `auto` | `cuda`, `cpu`, or `auto` to try CUDA and fall back to CPU |
 | `WHISPER_COMPUTE_TYPE` | `float16` on CUDA, `int8` on CPU | CTranslate2 compute type |
+| `WHISPER_WORKER_TIMEOUT` | `900` | Seconds to wait for the worker before giving up |
 
 Transcription runs on the CPU out of the box. For GPU acceleration on an NVIDIA card, install the optional CUDA libraries:
 
