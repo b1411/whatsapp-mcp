@@ -15,7 +15,7 @@ from whatsapp import (
     send_audio_message as whatsapp_audio_voice_message,
     download_media as whatsapp_download_media
 )
-from transcribe import transcribe_file
+from worker_client import transcribe as transcribe_file
 from media import extract_frames, format_timestamp, load_image, probe as probe_video
 
 # Initialize FastMCP server

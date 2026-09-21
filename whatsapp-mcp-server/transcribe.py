@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Any, Dict, List, Optional
 
 # Windows without Developer Mode cannot create the symlinks the HF cache uses by
@@ -50,8 +51,9 @@ _register_cuda_dlls()
 
 
 def _log(msg: str) -> None:
-    # stdout belongs to the MCP JSON-RPC stream, so diagnostics go to stderr.
-    print(msg, file=sys.stderr)
+    # stdout carries the worker protocol, so diagnostics go to stderr, which the
+    # client redirects to a log file.
+    print(f"{time.strftime('%H:%M:%S')} {msg}", file=sys.stderr)
 
 
 def _smoke_test(model) -> None:
@@ -118,10 +120,13 @@ def transcribe_file(
 
     wav_path = None
     try:
+        _log(f"transcribe: start {os.path.basename(audio_path)}")
         model, device, compute_type = _load_model(
             model_size or DEFAULT_MODEL, DEFAULT_DEVICE, DEFAULT_COMPUTE_TYPE
         )
+        _log("transcribe: model ready, converting audio")
         wav_path = _to_wav(audio_path)
+        _log("transcribe: audio converted, decoding")
 
         segments, info = model.transcribe(
             wav_path,
@@ -131,6 +136,7 @@ def transcribe_file(
             beam_size=5,
         )
         segments = list(segments)  # the generator is what actually runs inference
+        _log("transcribe: decode finished")
         text = " ".join(s.text.strip() for s in segments).strip()
 
         result: Dict[str, Any] = {
